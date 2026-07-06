@@ -10,11 +10,10 @@ on the backend.
 | ------------ | -------------------------------------------------------------------- |
 | Frontend     | Next.js 14 (App Router), TypeScript, TailwindCSS, TanStack Query, socket.io-client |
 | Backend      | Node.js, Express, TypeScript, Zod validation, JWT auth, bcrypt        |
-| Database     | PostgreSQL via Prisma ORM                                             |
+| Database     | MySQL via Prisma ORM                                                  |
 | Real-time    | Socket.IO (rooms per user + an `admins` room)                        |
 | Testing      | Jest + Supertest (backend), Jest + React Testing Library (frontend)   |
-| CI/CD        | GitHub Actions (lint + test on every push/PR), deploy-hook CD to Render + Vercel |
-| Containers   | Docker + docker-compose (Postgres, backend, frontend)                |
+| CI           | GitHub Actions (lint + test on every push/PR)                        |
 
 ## Project Structure
 
@@ -35,8 +34,7 @@ apps/
     hooks/            useTasks, useUsers, useTaskSocket
     __tests__/        React Testing Library tests
 postman/              Postman collection + environment
-.github/workflows/    CI (lint/test) and CD (deploy hooks) pipelines
-docker-compose.yml    One-command local stack (Postgres + backend + frontend)
+.github/workflows/    CI (lint + test) pipeline
 ```
 
 ## Setup Instructions
@@ -45,7 +43,8 @@ docker-compose.yml    One-command local stack (Postgres + backend + frontend)
 
 - Node.js 20+
 - npm 10+
-- PostgreSQL 16 (or use `docker-compose` to run it for you)
+- MySQL 8 — a local install or **MAMP** works fine (this project assumes MAMP's defaults:
+  user `root`, password `root`, port `3306`)
 
 ### 1. Clone and install
 
@@ -70,12 +69,15 @@ cp apps/frontend/.env.example apps/frontend/.env
 
 | Variable            | Description                                              |
 | ------------------- | ---------------------------------------------------------- |
-| `DATABASE_URL`      | Postgres connection string                                  |
-| `TEST_DATABASE_URL` | Separate Postgres DB/schema used only by the test suite      |
+| `DATABASE_URL`      | MySQL connection string, e.g. `mysql://root:root@localhost:3306/task_tracker` |
+| `TEST_DATABASE_URL` | Separate MySQL database used only by the test suite         |
 | `JWT_SECRET`        | Secret used to sign JWTs — set to a long random string       |
 | `JWT_EXPIRES_IN`    | Access token lifetime (default `1d`)                         |
 | `CORS_ORIGIN`       | Comma-separated list of allowed frontend origins             |
 | `PORT`              | Port the API listens on (default `4000`)                     |
+
+> **MAMP note:** if your MAMP MySQL runs on a different port (check the MAMP start page),
+> update the port in both connection strings.
 
 **`apps/frontend/.env`**
 
@@ -85,10 +87,12 @@ cp apps/frontend/.env.example apps/frontend/.env
 
 ### 3. Database setup
 
-Start Postgres (skip if you already have one running locally):
+Start MySQL (launch MAMP and make sure the MySQL server light is green), then create the
+databases — e.g. via phpMyAdmin from the MAMP start page, or the mysql CLI:
 
-```bash
-docker compose up -d postgres
+```sql
+CREATE DATABASE task_tracker;
+CREATE DATABASE task_tracker_test;
 ```
 
 Run migrations and seed demo data:
@@ -109,14 +113,6 @@ The seed creates two accounts (password `Password123!` for both):
 npm run dev:backend    # http://localhost:4000
 npm run dev:frontend   # http://localhost:3000
 ```
-
-### Run everything with Docker instead
-
-```bash
-docker compose up --build
-```
-
-This builds and runs Postgres, the backend (running `prisma migrate deploy` on boot), and the frontend.
 
 ### Tests
 
@@ -150,9 +146,9 @@ The **Tasks (as Admin / RBAC)** folder includes negative-case requests demonstra
   a new route). `ADMIN` role bypasses ownership checks entirely and can optionally assign a task's owner
   on create.
 - **Auth token transport**: JWT is returned in the response body and sent back as an
-  `Authorization: Bearer <token>` header, not an httpOnly cookie. This avoids cross-site cookie
-  complications between the Vercel-hosted frontend and Render-hosted backend (different domains) and
-  keeps the auth flow simple to reason about and test. See "Future Improvements" for the tradeoff.
+  `Authorization: Bearer <token>` header, not an httpOnly cookie. This keeps the auth flow simple to
+  reason about and test, and works unchanged if the frontend and backend are ever hosted on different
+  domains. See "Future Improvements" for the tradeoff.
 - **Real-time updates**: Socket.IO connections authenticate with the same JWT (passed via
   `socket.handshake.auth.token`) and join a `user:<id>` room, plus an `admins` room if applicable. Task
   mutations emit to the owner's room and the `admins` room, so the UI updates live without a page
@@ -160,8 +156,8 @@ The **Tasks (as Admin / RBAC)** folder includes negative-case requests demonstra
 - **Validation**: all request bodies/queries/params are parsed through Zod schemas in a single
   `validate()` middleware, so invalid input is rejected before it reaches business logic, with a
   consistent `{ message, errors }` shape and correct HTTP status codes.
-- **Monorepo**: npm workspaces keep the frontend and backend in one repository (per the submission
-  instructions) while still allowing each app to be built, linted, and deployed independently.
+- **Monorepo**: npm workspaces keep the frontend and backend in one repository while still allowing
+  each app to be built, linted, and run independently.
 
 ## Assumptions
 
@@ -170,7 +166,7 @@ The **Tasks (as Admin / RBAC)** folder includes negative-case requests demonstra
 - "Owner" filtering on the task list is only meaningful for `ADMIN` (a `USER`'s tasks are always
   scoped to themselves regardless of the `owner` query parameter).
 - Soft-deletes were out of scope; task deletion is permanent.
-- Test database and app database are assumed to be separate schemas/DBs to avoid the test suite wiping
+- Test database and app database are assumed to be separate databases to avoid the test suite wiping
   development data.
 
 ## Future Improvements
@@ -180,17 +176,4 @@ The **Tasks (as Admin / RBAC)** folder includes negative-case requests demonstra
 - Add rate limiting / brute-force protection on the auth endpoints.
 - Add end-to-end tests (Playwright) covering the full register → login → CRUD → real-time flow.
 - Support bulk task actions and richer filtering (search by title, filter by due date range).
-
-## Deployment
-
-- **Backend**: Docker image deployed to [Render](https://render.com) with a managed Postgres instance;
-  `prisma migrate deploy` runs automatically on container start.
-- **Frontend**: deployed to [Vercel](https://vercel.com), configured with `NEXT_PUBLIC_API_URL` pointing
-  at the deployed backend.
-- **CD**: `.github/workflows/cd.yml` runs after CI succeeds on `main` and calls the Render/Vercel deploy
-  hooks (configured as `RENDER_DEPLOY_HOOK_URL` / `VERCEL_DEPLOY_HOOK_URL` repository secrets).
-
-Live URLs:
-
-- Frontend: _TODO — add after deployment_
-- Backend: _TODO — add after deployment_
+- Containerize with Docker and add a CD pipeline for one-command deployment.
