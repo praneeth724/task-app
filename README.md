@@ -4,7 +4,7 @@ A full-stack task tracker with authentication, role-based access control (RBAC),
 and real-time updates — built with **Next.js (TypeScript)** on the frontend and **Express (TypeScript)**
 on the backend.
 
-## Tech Stack
+## Tech Stacks
 
 | Layer        | Choice                                                              |
 | ------------ | -------------------------------------------------------------------- |
