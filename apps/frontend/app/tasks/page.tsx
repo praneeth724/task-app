@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthGuard } from '../../components/AuthGuard';
 import { Navbar } from '../../components/Navbar';
 import { TaskFilters } from '../../components/TaskFilters';
@@ -9,13 +10,35 @@ import { TaskForm } from '../../components/TaskForm';
 import { Pagination } from '../../components/Pagination';
 import { useCreateTask, useDeleteTask, useTasksQuery } from '../../hooks/useTasks';
 import { useTaskSocket } from '../../hooks/useTaskSocket';
-import type { TaskFilters as TaskFiltersValue } from '../../types/task';
+import type { TaskFilters as TaskFiltersValue, TaskStatus } from '../../types/task';
 
-const DEFAULT_FILTERS: TaskFiltersValue = { page: 1, limit: 10 };
+const PAGE_SIZE = 10;
+const STATUSES: TaskStatus[] = ['TODO', 'IN_PROGRESS', 'DONE'];
+
+function parseStatus(raw: string | null): TaskStatus | undefined {
+  return STATUSES.includes(raw as TaskStatus) ? (raw as TaskStatus) : undefined;
+}
 
 function TasksPageContent() {
-  const [filters, setFilters] = useState<TaskFiltersValue>(DEFAULT_FILTERS);
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [isCreating, setIsCreating] = useState(false);
+
+  const filters: TaskFiltersValue = {
+    page: Math.max(1, Number(searchParams.get('page')) || 1),
+    limit: PAGE_SIZE,
+    status: parseStatus(searchParams.get('status')),
+    owner: searchParams.get('owner') ?? undefined,
+  };
+
+  const setFilters = (next: TaskFiltersValue) => {
+    const params = new URLSearchParams();
+    if (next.page > 1) params.set('page', String(next.page));
+    if (next.status) params.set('status', next.status);
+    if (next.owner) params.set('owner', next.owner);
+    const query = params.toString();
+    router.replace(query ? `/tasks?${query}` : '/tasks');
+  };
 
   useTaskSocket();
   const { data, isLoading, isError } = useTasksQuery(filters);
@@ -68,7 +91,7 @@ function TasksPageContent() {
               <Pagination
                 page={data.meta.page}
                 totalPages={data.meta.totalPages}
-                onPageChange={(page) => setFilters((prev) => ({ ...prev, page }))}
+                onPageChange={(page) => setFilters({ ...filters, page })}
               />
             </div>
           </>
@@ -81,7 +104,9 @@ function TasksPageContent() {
 export default function TasksPage() {
   return (
     <AuthGuard>
-      <TasksPageContent />
+      <Suspense fallback={null}>
+        <TasksPageContent />
+      </Suspense>
     </AuthGuard>
   );
 }

@@ -24,7 +24,7 @@ describe('LoginPage', () => {
 
     await userEvent.type(screen.getByLabelText('Email'), 'user@example.com');
     await userEvent.type(screen.getByLabelText('Password'), 'Password123!');
-    await userEvent.click(screen.getByText('Log in'));
+    await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
 
     expect(loginMock).toHaveBeenCalledWith('user@example.com', 'Password123!');
     expect(pushMock).toHaveBeenCalledWith('/tasks');
@@ -36,7 +36,7 @@ describe('LoginPage', () => {
 
     await userEvent.type(screen.getByLabelText('Email'), 'user@example.com');
     await userEvent.type(screen.getByLabelText('Password'), 'wrong');
-    await userEvent.click(screen.getByText('Log in'));
+    await userEvent.click(screen.getByRole('button', { name: 'Log in' }));
 
     expect(await screen.findByText('Something went wrong')).toBeInTheDocument();
   });
